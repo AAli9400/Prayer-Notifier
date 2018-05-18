@@ -1,5 +1,4 @@
 # Prayer-Notifier
-
 A simple application that push notification on each prayer time.
 
 ## App logic
@@ -10,3 +9,7 @@ A simple application that push notification on each prayer time.
 
 ##API used
 You can find more details about the API [HERE](https://aladhan.com/islamic-calendar-api).
+
+## License
+This project is licensed under the Apache License 2.0
+ - see the [LICENSE.md](https://github.com/AAli9400/Prayer-Notifier/blob/master/LICENSE) file for details.
