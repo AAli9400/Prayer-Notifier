@@ -1,4 +1,4 @@
-# Prayer-Notifier
+# Prayer Notifier
 A simple application that push notification on each prayer time.
 
 ## App logic
