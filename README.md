@@ -7,7 +7,7 @@ A simple application that push notification on each prayer time.
 * Each Schecduled notification is responable for schedule the next notification, relying on the data stored in the local database.
 * If month ended and user is not connected to the internet. the app will present the last day's data.
 
-##API used
+## API used
 You can find more details about the API [HERE](https://aladhan.com/islamic-calendar-api).
 
 ## License
