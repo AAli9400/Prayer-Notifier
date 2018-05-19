@@ -35,7 +35,8 @@
                 android:id="@+id/tool_bar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:titleTextColor="@color/colorAccent" />
+                app:titleTextColor="@color/colorAccent"
+                app:popupTheme="@style/Widget.AppCompat.Light.PopupMenu"/>
         </android.support.design.widget.AppBarLayout>
 
         <TextView
