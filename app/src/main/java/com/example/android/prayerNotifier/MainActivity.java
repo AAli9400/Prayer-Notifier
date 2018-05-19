@@ -1,6 +1,8 @@
 package com.example.android.prayerNotifier;
 
 import android.annotation.SuppressLint;
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.arch.persistence.room.Room;
 import android.content.Intent;
 import android.os.AsyncTask;
@@ -8,6 +10,9 @@ import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -78,15 +83,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        if (mAsyncTask.getStatus() == AsyncTask.Status.RUNNING || mAsyncTask.getStatus() == AsyncTask.Status.PENDING) {
-            mAsyncTask.cancel(true);
-        }
-
-        if (mVolleyListenerAsyncTask != null) {
-            if (mVolleyListenerAsyncTask.getStatus() == AsyncTask.Status.RUNNING || mVolleyListenerAsyncTask.getStatus() == AsyncTask.Status.PENDING) {
-                mVolleyListenerAsyncTask.cancel(true);
-            }
-        }
+        stopAsyncTasks();
     }
 
     @SuppressLint("StaticFieldLeak")
@@ -145,10 +142,29 @@ public class MainActivity extends AppCompatActivity {
                     protected void onPostExecute(Void aVoid) {
                         updateLocally();
 
-                        Intent intent = new Intent(MainActivity.this, NotificationService.class);
-                        intent.setAction("scheduling");
-                        intent.putExtra("i", 0);
-                        startService(intent);
+                        //Schedule today's notifications
+                        Intent serviceIntent = new Intent(MainActivity.this, NotificationService.class);
+                        serviceIntent.setAction("scheduling");
+                        startService(serviceIntent);
+
+                        PendingIntent pendingIntent = PendingIntent.getService(getApplicationContext(), 0, serviceIntent, PendingIntent.FLAG_CANCEL_CURRENT);
+
+                        //Schedule to start the NotificationService every day
+                        //NotificationService will schedule each day's notifications
+                        Calendar calendar = Calendar.getInstance();
+                        calendar.setTimeInMillis(System.currentTimeMillis());
+                        calendar.set(Calendar.HOUR_OF_DAY, 1);
+                        calendar.set(Calendar.MINUTE, 0);
+
+                        if (calendar.getTimeInMillis() < System.currentTimeMillis()) {
+                            calendar.add(Calendar.DAY_OF_YEAR, 1);
+                        }
+
+                        AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
+                        if (alarmManager != null) {
+                            alarmManager.setInexactRepeating(AlarmManager.RTC_WAKEUP,
+                                    calendar.getTimeInMillis(), AlarmManager.INTERVAL_DAY, pendingIntent);
+                        }
                     }
                 }.execute();
             }
@@ -159,11 +175,11 @@ public class MainActivity extends AppCompatActivity {
                 mVolleyListenerAsyncTask = new AsyncTask<Void, Void, Void>() {
                     @Override
                     protected Void doInBackground(Void... voids) {
+                        mPrayTodayData = mDatabase.prayDao().loadByDate(mCurrentDate);
                         int i = 31;
-                        do {
+                        while (mPrayTodayData == null) {
                             mPrayTodayData = mDatabase.prayDao().loadById(i--);
                         }
-                        while (mPrayTodayData == null);
                         return null;
                     }
 
@@ -242,7 +258,50 @@ public class MainActivity extends AppCompatActivity {
 
             mProgressBar.setVisibility(View.GONE);
         } else {
-            Toast.makeText(this, "Check your device date and restart the app", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Check your device date then restart the app", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        new MenuInflater(this).inflate(R.menu.menu_main, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.action_reset) {
+            stopAsyncTasks();
+
+            //cancel all scheduled notifications
+            for (int i = 0; i < 5; ++i) {
+                Intent intent = new Intent(getApplicationContext(), NotificationService.class);
+                intent.setAction("push_notification");
+                intent.putExtra("prayer", String.valueOf(i));
+
+                PendingIntent pendingIntent = PendingIntent.getService(this, i, intent, PendingIntent.FLAG_CANCEL_CURRENT);
+
+                AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
+                if (alarmManager != null) {
+                    alarmManager.cancel(pendingIntent);
+                }
+            }
+
+            updateFromTheInternet();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    private void stopAsyncTasks() {
+        if (mAsyncTask.getStatus() == AsyncTask.Status.RUNNING || mAsyncTask.getStatus() == AsyncTask.Status.PENDING) {
+            mAsyncTask.cancel(true);
+        }
+
+        if (mVolleyListenerAsyncTask != null) {
+            if (mVolleyListenerAsyncTask.getStatus() == AsyncTask.Status.RUNNING || mVolleyListenerAsyncTask.getStatus() == AsyncTask.Status.PENDING) {
+                mVolleyListenerAsyncTask.cancel(true);
+            }
         }
     }
 }
