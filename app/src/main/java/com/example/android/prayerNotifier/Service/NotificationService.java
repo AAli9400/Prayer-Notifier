@@ -26,39 +26,33 @@ public class NotificationService extends IntentService {
     @Override
     protected void onHandleIntent(Intent intent) {
         if (intent.getAction().equals("scheduling")) {
-            scheduleNotifications(intent.getIntExtra("i", 0));
+            scheduleNotifications();
         } else if (intent.getAction().equals("push_notification")) {
             pushNotification(intent.getStringExtra("prayer"));
         }
     }
 
-    private void scheduleNotifications(int i) {
+    private void scheduleNotifications() {
         AppDatabase database = Room.databaseBuilder(getApplicationContext(),
                 AppDatabase.class, "prayer_notifier").build();
 
-        boolean scheduleForTheNextDay = (i == 5);
 
         Calendar calendar = Calendar.getInstance();
-        int currentDay = calendar.get(Calendar.DAY_OF_MONTH);
-        if (scheduleForTheNextDay) {
-            currentDay++;
-            i = 0;
-        }
         String currentMonth = String.valueOf(calendar.get(Calendar.MONTH) + 1);
         if (currentMonth.charAt(0) != '1') {
             currentMonth = "0" + currentMonth;
         }
-        String prayTodayData = String.valueOf(currentDay) + "-" +
+        String prayTodayData = String.valueOf(calendar.get(Calendar.DAY_OF_MONTH)) + "-" +
                 currentMonth + "-" +
                 String.valueOf(calendar.get(Calendar.YEAR));
 
         PrayerData prayerData = database.prayDao().loadByDate(prayTodayData);
+        if (prayerData != null) {
 
-        ArrayList<Integer> times = new ArrayList<>();
-        times.add(Integer.valueOf(prayerData.getFajr().substring(0, 2)));
-        times.add(Integer.valueOf(prayerData.getFajr().substring(3, 5)));
+            ArrayList<Integer> times = new ArrayList<>();
+            times.add(Integer.valueOf(prayerData.getFajr().substring(0, 2)));
+            times.add(Integer.valueOf(prayerData.getFajr().substring(3, 5)));
 
-        if (!scheduleForTheNextDay) {
             times.add(Integer.valueOf(prayerData.getDhur().substring(0, 2)));
             times.add(Integer.valueOf(prayerData.getDhur().substring(3, 5)));
 
@@ -70,43 +64,30 @@ public class NotificationService extends IntentService {
 
             times.add(Integer.valueOf(prayerData.getIsha().substring(0, 2)));
             times.add(Integer.valueOf(prayerData.getIsha().substring(3, 5)));
-        }
 
-        /*
-         * i | -> | j
-         * ----------
-         * 0 | -> | 0
-         * 1 | -> | 2
-         * 2 | -> | 4
-         * 3 | -> | 6
-         *
-         * and so on
-         * */
+            int j = 0;
 
-        int j = i + i;
+            //schedule notification for all prayers
+            for (int i = 0; i < 5; ++i) {
+                Calendar c = Calendar.getInstance();
+                c.setTimeInMillis(System.currentTimeMillis());
+                c.set(Calendar.HOUR_OF_DAY, times.get(j++));
+                c.set(Calendar.MINUTE, times.get(j++));
 
-        for (; i < 5; ++i) {
-            Calendar c = Calendar.getInstance();
-            c.setTimeInMillis(System.currentTimeMillis());
-            c.set(Calendar.HOUR_OF_DAY, times.get(j++));
-            c.set(Calendar.MINUTE, times.get(j++));
-            if(scheduleForTheNextDay){
-                c.add(Calendar.DAY_OF_YEAR, 1);
-            }
+                //if we passed the time of the notification, don't schedule it for today
+                if (!(c.getTimeInMillis() < System.currentTimeMillis())) {
+                    Intent intent = new Intent(getApplicationContext(), NotificationService.class);
+                    intent.setAction("push_notification");
+                    intent.putExtra("prayer", String.valueOf(i));//value of i is important here
 
-            if (!(c.getTimeInMillis() < System.currentTimeMillis())) {
+                    PendingIntent pendingIntent = PendingIntent.getService(this, i, intent, PendingIntent.FLAG_CANCEL_CURRENT);
 
-                Intent intent = new Intent(getApplicationContext(), NotificationService.class);
-                intent.setAction("push_notification");
-                intent.putExtra("prayer", String.valueOf(i));//value of i is important here
-                PendingIntent pendingIntent = PendingIntent.getService(this, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
-
-                AlarmManager alarmManager = (AlarmManager) this.getSystemService(ALARM_SERVICE);
-                if (alarmManager != null) {
-                    alarmManager.setExact(AlarmManager.RTC_WAKEUP,
-                            c.getTimeInMillis(), pendingIntent);
+                    AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
+                    if (alarmManager != null) {
+                        alarmManager.setExact(AlarmManager.RTC_WAKEUP,
+                                c.getTimeInMillis(), pendingIntent);
+                    }
                 }
-                break;
             }
         }
     }
@@ -117,10 +98,10 @@ public class NotificationService extends IntentService {
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setSmallIcon(R.mipmap.ic_notification)
                 .setContentIntent(PendingIntent.getActivity(
-                                getApplicationContext(),
-                                1,
-                                new Intent(getApplicationContext(), MainActivity.class),
-                                PendingIntent.FLAG_CANCEL_CURRENT))
+                        getApplicationContext(),
+                        Integer.valueOf(prayer),
+                        new Intent(getApplicationContext(), MainActivity.class),
+                        PendingIntent.FLAG_CANCEL_CURRENT))
                 .setAutoCancel(true);
 
         switch (prayer) {
@@ -157,10 +138,5 @@ public class NotificationService extends IntentService {
         if (notificationManager != null) {
             notificationManager.notify(0, mBuilder.build());
         }
-
-        Intent intent = new Intent(getApplicationContext(), NotificationService.class);
-        intent.setAction("scheduling");
-        intent.putExtra("i", Integer.valueOf(prayer) + 1);
-        startService(intent);
     }
 }
