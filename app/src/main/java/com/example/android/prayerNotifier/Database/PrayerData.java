@@ -12,8 +12,8 @@ public class PrayerData {
     @ColumnInfo(name = "fajr")
     private String fajr;
 
-    @ColumnInfo(name = "dhur")
-    private String dhur;
+    @ColumnInfo(name = "dhuhr")
+    private String dhuhr;
 
     @ColumnInfo(name = "asr")
     private String asr;
@@ -46,12 +46,12 @@ public class PrayerData {
         this.fajr = fajr;
     }
 
-    public String getDhur() {
-        return dhur;
+    public String getDhuhr() {
+        return dhuhr;
     }
 
-    public void setDhur(String dhur) {
-        this.dhur = dhur;
+    public void setDhuhr(String dhuhr) {
+        this.dhuhr = dhuhr;
     }
 
     public String getAsr() {

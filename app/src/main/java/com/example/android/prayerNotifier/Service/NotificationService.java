@@ -7,6 +7,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.arch.persistence.room.Room;
 import android.content.Intent;
+import android.os.Build;
 import android.support.v4.app.NotificationCompat;
 
 import com.example.android.prayerNotifier.Database.AppDatabase;
@@ -53,8 +54,8 @@ public class NotificationService extends IntentService {
             times.add(Integer.valueOf(prayerData.getFajr().substring(0, 2)));
             times.add(Integer.valueOf(prayerData.getFajr().substring(3, 5)));
 
-            times.add(Integer.valueOf(prayerData.getDhur().substring(0, 2)));
-            times.add(Integer.valueOf(prayerData.getDhur().substring(3, 5)));
+            times.add(Integer.valueOf(prayerData.getDhuhr().substring(0, 2)));
+            times.add(Integer.valueOf(prayerData.getDhuhr().substring(3, 5)));
 
             times.add(Integer.valueOf(prayerData.getAsr().substring(0, 2)));
             times.add(Integer.valueOf(prayerData.getAsr().substring(3, 5)));
@@ -73,6 +74,7 @@ public class NotificationService extends IntentService {
                 c.setTimeInMillis(System.currentTimeMillis());
                 c.set(Calendar.HOUR_OF_DAY, times.get(j++));
                 c.set(Calendar.MINUTE, times.get(j++));
+                c.set(Calendar.SECOND, 0);
 
                 //if we passed the time of the notification, don't schedule it for today
                 if (!(c.getTimeInMillis() < System.currentTimeMillis())) {
@@ -84,8 +86,13 @@ public class NotificationService extends IntentService {
 
                     AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
                     if (alarmManager != null) {
-                        alarmManager.setExact(AlarmManager.RTC_WAKEUP,
-                                c.getTimeInMillis(), pendingIntent);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,
+                                    c.getTimeInMillis(), pendingIntent);
+                        } else {
+                            alarmManager.setExact(AlarmManager.RTC_WAKEUP,
+                                    c.getTimeInMillis(), pendingIntent);
+                        }
                     }
                 }
             }

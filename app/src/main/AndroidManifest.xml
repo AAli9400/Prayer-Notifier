@@ -3,7 +3,9 @@
     package="com.example.android.prayerNotifier">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission
+        android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="true"
@@ -23,12 +25,13 @@
 
         <service
             android:name=".Service.NotificationService"
-            android:exported="false"/>
+            android:exported="false" />
 
-        <receiver android:name=".Service.Receiver"
+        <receiver
+            android:name=".Service.Receiver"
             android:enabled="true">
             <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
     </application>

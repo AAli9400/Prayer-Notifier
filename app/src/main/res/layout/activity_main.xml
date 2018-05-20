@@ -35,8 +35,8 @@
                 android:id="@+id/tool_bar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:titleTextColor="@color/colorAccent"
-                app:popupTheme="@style/Widget.AppCompat.Light.PopupMenu"/>
+                app:popupTheme="@style/Widget.AppCompat.Light.PopupMenu"
+                app:titleTextColor="@color/colorAccent" />
         </android.support.design.widget.AppBarLayout>
 
         <TextView
@@ -112,12 +112,11 @@
             android:layout_marginTop="8dp"
             android:background="@color/colorAccent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="1.0"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/fajr" />
 
         <LinearLayout
-            android:id="@+id/dhur"
+            android:id="@+id/dhuhr"
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:layout_marginEnd="16dp"
@@ -135,12 +134,12 @@
                 android:layout_gravity="center_vertical"
                 android:layout_weight="1"
                 android:gravity="center"
-                android:text="Dhur"
+                android:text="Dhuhr"
                 android:textAppearance="@style/TextAppearance.AppCompat.Medium"
                 android:textSize="30sp" />
 
             <TextView
-                android:id="@+id/dhur_time"
+                android:id="@+id/dhuhr_time"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_vertical"
@@ -161,9 +160,8 @@
             android:layout_marginTop="8dp"
             android:background="@color/colorAccent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="1.0"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/dhur" />
+            app:layout_constraintTop_toBottomOf="@+id/dhuhr" />
 
         <LinearLayout
             android:id="@+id/asr"
@@ -210,7 +208,6 @@
             android:layout_marginTop="8dp"
             android:background="@color/colorAccent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="0.0"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/asr" />
 
@@ -259,7 +256,6 @@
             android:layout_marginTop="8dp"
             android:background="@color/colorAccent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="1.0"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/maghrib" />
 
@@ -308,7 +304,6 @@
             android:layout_marginTop="8dp"
             android:background="@color/colorAccent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="1.0"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/isha" />
     </android.support.constraint.ConstraintLayout>

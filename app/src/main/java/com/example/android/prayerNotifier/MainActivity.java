@@ -5,8 +5,13 @@ import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.arch.persistence.room.Room;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
@@ -41,7 +46,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView mHijriDateTextView;
 
     private TextView mFajrTimeTextView;
-    private TextView mDhurTimeTextView;
+    private TextView mDhuhrTimeTextView;
     private TextView mAsrTimeTextView;
     private TextView mMghribTimeTextView;
     private TextView mIshaTimeTextView;
@@ -49,8 +54,10 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar mProgressBar;
 
     private AppDatabase mDatabase;
-    private DatabaseAsyncTask mAsyncTask;
-    private AsyncTask mVolleyListenerAsyncTask;
+    private DatabaseAsyncTask mDatabaseAsyncTask;
+
+    private VolleyOnResponseAsyncTask mVolleyOnResponseAsyncTask;
+    private VolleyOnErrorAsyncTask mVolleyOnErrorAsyncTask;
 
     private String mCurrentDate;
     private PrayerData mPrayTodayData;
@@ -66,7 +73,7 @@ public class MainActivity extends AppCompatActivity {
         mHijriDateTextView = findViewById(R.id.hijri_date);
 
         mFajrTimeTextView = findViewById(R.id.fajr_time);
-        mDhurTimeTextView = findViewById(R.id.dhur_time);
+        mDhuhrTimeTextView = findViewById(R.id.dhuhr_time);
         mAsrTimeTextView = findViewById(R.id.asr_time);
         mMghribTimeTextView = findViewById(R.id.mghrib_time);
         mIshaTimeTextView = findViewById(R.id.isha_time);
@@ -76,50 +83,58 @@ public class MainActivity extends AppCompatActivity {
         mDatabase = Room.databaseBuilder(getApplicationContext(),
                 AppDatabase.class, "prayer_notifier").build();
 
-        mAsyncTask = new DatabaseAsyncTask();
-        mAsyncTask.execute();
+        mDatabaseAsyncTask = new DatabaseAsyncTask();
+        mDatabaseAsyncTask.execute();
+
+        SharedPreferences mPreferences = getPreferences(MODE_PRIVATE);
+        if (!mPreferences.getBoolean("run", false)) {
+            SharedPreferences.Editor editor = mPreferences.edit();
+            editor.putBoolean("run", true).apply();
+
+            ScheduleRepeatingAlarmToFireNotificationServiceEveryDay();
+        }
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-        stopAsyncTasks();
+    public boolean onCreateOptionsMenu(Menu menu) {
+        new MenuInflater(this).inflate(R.menu.menu_main, menu);
+        return true;
     }
 
-    @SuppressLint("StaticFieldLeak")
-    private class DatabaseAsyncTask extends AsyncTask<Void, Void, Boolean> {
-
-        @Override
-        protected Boolean doInBackground(Void... voids) {
-            Calendar calendar = Calendar.getInstance();
-            String currentMonth = String.valueOf(calendar.get(Calendar.MONTH) + 1);
-            if (currentMonth.charAt(0) != '1') {
-                currentMonth = "0" + currentMonth;
-            }
-            mCurrentDate = String.valueOf(calendar.get(Calendar.DAY_OF_MONTH)) + "-" +
-                    currentMonth + "-" +
-                    String.valueOf(calendar.get(Calendar.YEAR));
-
-            mPrayTodayData = mDatabase.prayDao().loadByDate(mCurrentDate);
-
-            if (mPrayTodayData == null) {
-                updateFromTheInternet();
-                return false;
-            } else {
-                mPrayTodayData = mDatabase.prayDao().loadByDate(mCurrentDate);
+    @SuppressLint({"StaticFieldLeak", "BatteryLife"})
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.action_reset:
+                RefreshAsyncTask refreshAsyncTask = new RefreshAsyncTask();
+                refreshAsyncTask.execute();
                 return true;
-            }
-        }
 
-        @Override
-        protected void onPostExecute(Boolean updateLocally) {
-            if (updateLocally) {
-                updateLocally();
-            }
+            case R.id.action_fix_notifications:
+                //Ask for user permission to make the app not battery optimized
+                //Cause making it battery optimized will affect the alarm manager.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    Intent intent = new Intent();
+                    String packageName = getPackageName();
+                    PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+                    if (pm != null) {
+                        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                            intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                            intent.setData(Uri.parse("package:" + packageName));
+                            startActivity(intent);
+                        }else{
+                            Toast.makeText(this, "All required permissions already granted", Toast.LENGTH_LONG).show();
+                        }
+                    }
+                }
+                return true;
+
+            default:
+                return super.onOptionsItemSelected(item);
         }
     }
 
-    private void updateFromTheInternet() {
+    private void updateFromTheInternet(final boolean refresh) {
         // Instantiate the RequestQueue.
         RequestQueue queue = Volley.newRequestQueue(this);
         String url = "http://api.aladhan.com/v1/calendarByCity?city=Cairo&country=Egypt&method=5";
@@ -129,67 +144,15 @@ public class MainActivity extends AppCompatActivity {
             @SuppressLint("StaticFieldLeak")
             @Override
             public void onResponse(final String response) {
-                mVolleyListenerAsyncTask = new AsyncTask<Void, Void, Void>() {
-                    @Override
-                    protected Void doInBackground(Void... voids) {
-                        parseJsonResponseToTheDataBase(response);//add the new month data
-
-                        mPrayTodayData = mDatabase.prayDao().loadByDate(mCurrentDate);
-                        return null;
-                    }
-
-                    @Override
-                    protected void onPostExecute(Void aVoid) {
-                        updateLocally();
-
-                        //Schedule today's notifications
-                        Intent serviceIntent = new Intent(MainActivity.this, NotificationService.class);
-                        serviceIntent.setAction("scheduling");
-                        startService(serviceIntent);
-
-                        PendingIntent pendingIntent = PendingIntent.getService(getApplicationContext(), 0, serviceIntent, PendingIntent.FLAG_CANCEL_CURRENT);
-
-                        //Schedule to start the NotificationService every day
-                        //NotificationService will schedule each day's notifications
-                        Calendar calendar = Calendar.getInstance();
-                        calendar.setTimeInMillis(System.currentTimeMillis());
-                        calendar.set(Calendar.HOUR_OF_DAY, 1);
-                        calendar.set(Calendar.MINUTE, 0);
-
-                        if (calendar.getTimeInMillis() < System.currentTimeMillis()) {
-                            calendar.add(Calendar.DAY_OF_YEAR, 1);
-                        }
-
-                        AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
-                        if (alarmManager != null) {
-                            alarmManager.setInexactRepeating(AlarmManager.RTC_WAKEUP,
-                                    calendar.getTimeInMillis(), AlarmManager.INTERVAL_DAY, pendingIntent);
-                        }
-                    }
-                }.execute();
+                mVolleyOnResponseAsyncTask = new VolleyOnResponseAsyncTask();
+                mVolleyOnResponseAsyncTask.execute(response, (refresh) ? "true" : "false");
             }
         }, new Response.ErrorListener() {
             @SuppressLint("StaticFieldLeak")
             @Override
             public void onErrorResponse(VolleyError error) {
-                mVolleyListenerAsyncTask = new AsyncTask<Void, Void, Void>() {
-                    @Override
-                    protected Void doInBackground(Void... voids) {
-                        mPrayTodayData = mDatabase.prayDao().loadByDate(mCurrentDate);
-                        int i = 31;
-                        while (mPrayTodayData == null) {
-                            mPrayTodayData = mDatabase.prayDao().loadById(i--);
-                        }
-                        return null;
-                    }
-
-                    @Override
-                    protected void onPostExecute(Void aVoid) {
-                        updateLocally();
-
-                        Toast.makeText(MainActivity.this, "Error updating prayer timing", Toast.LENGTH_LONG).show();
-                    }
-                }.execute();
+                mVolleyOnErrorAsyncTask = new VolleyOnErrorAsyncTask();
+                mVolleyOnErrorAsyncTask.execute();
             }
         });
 
@@ -227,7 +190,7 @@ public class MainActivity extends AppCompatActivity {
 
                     JSONObject timings = object.getJSONObject("timings");
                     data.setFajr(timings.getString("Fajr").substring(0, 5));
-                    data.setDhur(timings.getString("Dhuhr").substring(0, 5));
+                    data.setDhuhr(timings.getString("Dhuhr").substring(0, 5));
                     data.setAsr(timings.getString("Asr").substring(0, 5));
                     data.setMghrib(timings.getString("Maghrib").substring(0, 5));
                     data.setIsha(timings.getString("Isha").substring(0, 5));
@@ -251,7 +214,7 @@ public class MainActivity extends AppCompatActivity {
             mHijriDateTextView.setText(mPrayTodayData.getHijriDate());
 
             mFajrTimeTextView.setText(mPrayTodayData.getFajr());
-            mDhurTimeTextView.setText(mPrayTodayData.getDhur());
+            mDhuhrTimeTextView.setText(mPrayTodayData.getDhuhr());
             mAsrTimeTextView.setText(mPrayTodayData.getAsr());
             mMghribTimeTextView.setText(mPrayTodayData.getMghrib());
             mIshaTimeTextView.setText(mPrayTodayData.getIsha());
@@ -262,46 +225,162 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        new MenuInflater(this).inflate(R.menu.menu_main, menu);
-        return true;
+    private void stopAsyncTasks() {
+        if (mDatabaseAsyncTask.getStatus() == AsyncTask.Status.RUNNING || mDatabaseAsyncTask.getStatus() == AsyncTask.Status.PENDING) {
+            mDatabaseAsyncTask.cancel(true);
+        }
+
+        if (mVolleyOnResponseAsyncTask != null) {
+            if (mVolleyOnResponseAsyncTask.getStatus() == AsyncTask.Status.RUNNING || mVolleyOnResponseAsyncTask.getStatus() == AsyncTask.Status.PENDING) {
+                mVolleyOnResponseAsyncTask.cancel(true);
+            }
+        }
     }
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == R.id.action_reset) {
+    private void ScheduleRepeatingAlarmToFireNotificationServiceEveryDay() {
+        //Schedule to start the NotificationService every day
+        //NotificationService will schedule each day's notification(s)
+        //This code runs only one time.
+
+        Intent serviceIntent = new Intent(MainActivity.this, NotificationService.class);
+        serviceIntent.setAction("scheduling");
+
+        PendingIntent pendingIntent = PendingIntent.getService(getApplicationContext(), 0, serviceIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(System.currentTimeMillis());
+        calendar.set(Calendar.HOUR_OF_DAY, 1);
+        calendar.set(Calendar.MINUTE, 0);
+
+        if (calendar.getTimeInMillis() < System.currentTimeMillis()) {
+            calendar.add(Calendar.DAY_OF_YEAR, 1);
+        }
+
+        AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
+        if (alarmManager != null) {
+            alarmManager.setInexactRepeating(AlarmManager.RTC_WAKEUP,
+                    calendar.getTimeInMillis(), AlarmManager.INTERVAL_DAY, pendingIntent);
+
+        }
+    }
+
+    @SuppressLint("StaticFieldLeak")
+    private class DatabaseAsyncTask extends AsyncTask<Void, Void, Boolean> {
+
+        @Override
+        protected Boolean doInBackground(Void... voids) {
+            //if the app was force closed, reschedule to start the NotificationService every day
+            Intent serviceIntent = new Intent(MainActivity.this, NotificationService.class);
+            serviceIntent.setAction("scheduling");
+            PendingIntent pendingIntent = PendingIntent.getService(
+                    getApplicationContext(),
+                    0,
+                    serviceIntent,
+                    PendingIntent.FLAG_NO_CREATE
+            );
+            if (pendingIntent == null) {
+                ScheduleRepeatingAlarmToFireNotificationServiceEveryDay();
+
+                //reschedule today's notification(s)
+                startService(serviceIntent);
+            }
+
+
+            Calendar calendar = Calendar.getInstance();
+            String currentMonth = String.valueOf(calendar.get(Calendar.MONTH) + 1);
+            if (currentMonth.charAt(0) != '1') {
+                currentMonth = "0" + currentMonth;
+            }
+            mCurrentDate = String.valueOf(calendar.get(Calendar.DAY_OF_MONTH)) + "-" +
+                    currentMonth + "-" +
+                    String.valueOf(calendar.get(Calendar.YEAR));
+
+            mPrayTodayData = mDatabase.prayDao().loadByDate(mCurrentDate);
+
+            if (mPrayTodayData == null) {
+                updateFromTheInternet(false);
+                return false;
+            } else {
+                return true;
+            }
+        }
+
+        @Override
+        protected void onPostExecute(Boolean updateLocally) {
+            if (updateLocally) {
+                updateLocally();
+            }
+        }
+    }
+
+    @SuppressLint("StaticFieldLeak")
+    private class VolleyOnResponseAsyncTask extends AsyncTask<String, Void, Boolean> {
+        @Override
+        protected Boolean doInBackground(String... strings) {
+            parseJsonResponseToTheDataBase(strings[0]);//add the new month data
+
+            mPrayTodayData = mDatabase.prayDao().loadByDate(mCurrentDate);
+
+            //Schedule today's notification(s)
+            Intent serviceIntent = new Intent(MainActivity.this, NotificationService.class);
+            serviceIntent.setAction("scheduling");
+            startService(serviceIntent);
+
+            return strings[1].equals("true");
+        }
+
+        @Override
+        protected void onPostExecute(Boolean refresh) {
+            updateLocally();
+
+            if (refresh) {
+                Toast.makeText(MainActivity.this, "Refreshed", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    @SuppressLint("StaticFieldLeak")
+    private class VolleyOnErrorAsyncTask extends AsyncTask<Void, Void, Void> {
+        @Override
+        protected Void doInBackground(Void... voids) {
+            mPrayTodayData = mDatabase.prayDao().loadByDate(mCurrentDate);
+            int i = 31;
+            while (mPrayTodayData == null) {
+                mPrayTodayData = mDatabase.prayDao().loadById(i--);
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void aVoid) {
+            updateLocally();
+
+            Toast.makeText(MainActivity.this, "Error updating prayer timing", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @SuppressLint("StaticFieldLeak")
+    private class RefreshAsyncTask extends AsyncTask<Void, Void, Void> {
+        @Override
+        protected Void doInBackground(Void... voids) {
             stopAsyncTasks();
 
-            //cancel all scheduled notifications
+            //cancel all scheduled notification(s)
             for (int i = 0; i < 5; ++i) {
                 Intent intent = new Intent(getApplicationContext(), NotificationService.class);
                 intent.setAction("push_notification");
                 intent.putExtra("prayer", String.valueOf(i));
 
-                PendingIntent pendingIntent = PendingIntent.getService(this, i, intent, PendingIntent.FLAG_CANCEL_CURRENT);
+                PendingIntent pendingIntent = PendingIntent.getService(getApplicationContext(), i, intent, PendingIntent.FLAG_NO_CREATE);
 
                 AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
-                if (alarmManager != null) {
+                if (alarmManager != null && pendingIntent != null) {
                     alarmManager.cancel(pendingIntent);
                 }
             }
 
-            updateFromTheInternet();
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
-    }
-
-    private void stopAsyncTasks() {
-        if (mAsyncTask.getStatus() == AsyncTask.Status.RUNNING || mAsyncTask.getStatus() == AsyncTask.Status.PENDING) {
-            mAsyncTask.cancel(true);
-        }
-
-        if (mVolleyListenerAsyncTask != null) {
-            if (mVolleyListenerAsyncTask.getStatus() == AsyncTask.Status.RUNNING || mVolleyListenerAsyncTask.getStatus() == AsyncTask.Status.PENDING) {
-                mVolleyListenerAsyncTask.cancel(true);
-            }
+            updateFromTheInternet(true);
+            return null;
         }
     }
 }
