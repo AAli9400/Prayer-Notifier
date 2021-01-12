@@ -288,12 +288,10 @@ public class MainActivity extends AppCompatActivity {
 
             Calendar calendar = Calendar.getInstance();
             String currentMonth = String.valueOf(calendar.get(Calendar.MONTH) + 1);
-            if (currentMonth.charAt(0) != '1') {
-                currentMonth = "0" + currentMonth;
-            }
+            if(currentMonth.length() == 1) currentMonth = "0" + currentMonth;
             mCurrentDate = String.valueOf(calendar.get(Calendar.DAY_OF_MONTH)) + "-" +
                     currentMonth + "-" +
-                    String.valueOf(calendar.get(Calendar.YEAR));
+                    String.valueOf(calendar.get(Calendar.YEAR)); // format should be like 1-01-2021
 
             mPrayTodayData = mDatabase.prayDao().loadByDate(mCurrentDate);
 
